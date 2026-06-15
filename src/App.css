@@ -1,0 +1,62 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { background: #f8f6ff; color: #1e1030; font-family: 'Segoe UI', sans-serif; }
+#root { animation: pageFadeIn 0.45s ease; }
+body, button, a, input, select, textarea, div, section, article, nav {
+  transition:
+    background-color 0.25s ease,
+    border-color 0.25s ease,
+    color 0.25s ease,
+    box-shadow 0.25s ease,
+    transform 0.25s ease,
+    opacity 0.25s ease;
+}
+input::placeholder { color: #b8a8d0; }
+input:focus,
+select:focus,
+textarea:focus { border-color: #9b7ed4 !important; box-shadow: 0 0 0 3px rgba(155,126,212,0.15) !important; outline: none; }
+button { transition: all 0.2s ease; }
+button:hover { opacity: 0.92; transform: translateY(-1px); }
+a { text-decoration-thickness: 1px; text-underline-offset: 3px; }
+a:hover { opacity: 0.95; }
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: #f8f6ff; }
+::-webkit-scrollbar-thumb { background: #9b7ed4; border-radius: 10px; }
+
+@keyframes pageFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Mobile utilities */
+@media (max-width: 768px) {
+  .desktop-only { display: none !important; }
+  .mobile-only { display: flex !important; }
+  .grid-2 { grid-template-columns: 1fr !important; }
+  .grid-3 { grid-template-columns: 1fr !important; }
+  .grid-4 { grid-template-columns: 1fr 1fr !important; }
+  .signup-grid { grid-template-columns: 1fr !important; }
+  .signup-form-grid { grid-template-columns: 1fr !important; }
+  .pad-desktop { padding: 48px 20px !important; }
+  .hero-title { font-size: 40px !important; letter-spacing: -1px !important; }
+  .hero-pad { padding: 100px 24px 60px !important; }
+  .dash-header-btns { display: none !important; }
+  .mobile-tabs { display: flex !important; }
+  .section-pad { padding: 60px 20px !important; }
+  .trainer-grid { grid-template-columns: 1fr !important; }
+  .mobile-stack { flex-direction: column !important; align-items: stretch !important; }
+  .mobile-stack > * { width: 100% !important; }
+  .mobile-center-text { text-align: center !important; }
+  .footer-stack { grid-template-columns: 1fr !important; }
+}
+
+@media (min-width: 769px) {
+  .mobile-only { display: none !important; }
+  .mobile-tabs { display: none !important; }
+}
