@@ -423,19 +423,36 @@ export default function TrainerDashboard({ onLogout }) {
       return;
     }
 
-    const { error } = await supabase.from("members").insert([
-      {
-        ...form,
-        age: form.age ? parseInt(form.age, 10) : null,
-        height: form.height ? parseFloat(form.height) : null,
-        weight: form.weight ? parseFloat(form.weight) : null,
-        fee_amount: form.fee_amount ? parseFloat(form.fee_amount) : 0,
-        join_date: new Date().toISOString().split("T")[0],
-      },
-    ]);
+    const payload = {
+      full_name: form.full_name.trim(),
+      username: form.username.trim(),
+      password: form.password.trim(),
+      phone: form.phone.trim() || null,
+      age: form.age ? parseInt(form.age, 10) : null,
+      height: form.height ? parseFloat(form.height) : null,
+      weight: form.weight ? parseFloat(form.weight) : null,
+      goal: form.goal.trim() || null,
+      fee_amount: form.fee_amount ? parseFloat(form.fee_amount) : 0,
+      expiry_date: form.expiry_date || null,
+      fee_status: form.fee_status || "unpaid",
+      package_type: form.package_type || null,
+      join_date: new Date().toISOString().split("T")[0],
+      role: "member",
+    };
 
-    if (error) {
-      setMsg(`error:${error.message}`);
+    try {
+      const { error } = await supabase.from("members").insert([payload]);
+
+      if (error) {
+        setMsg(`error:${error.message}`);
+        return;
+      }
+    } catch (error) {
+      const text = String(error?.message || error || "");
+      const friendly = text.toLowerCase().includes("failed to fetch")
+        ? "Could not reach Supabase. Refresh the page, then try again. If it still fails, disable browser shields/extensions or try another browser."
+        : text || "Could not add member right now.";
+      setMsg(`error:${friendly}`);
       return;
     }
 
