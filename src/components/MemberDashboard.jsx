@@ -1,7 +1,11 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../supabase";
-import { ASSESSMENT_FIELDS, calcAssessmentBMI, getAssessmentBMICategory, getBodyFatStatus, getMemberAssessment } from "../memberAssessments";
+import { ASSESSMENT_FIELDS, calcAssessmentBMI, createDefaultAssessment, fetchMemberAssessments, getAssessmentBMICategory, getBodyFatStatus } from "../memberAssessments";
 import { getMemberPhoto } from "../memberPhotos";
+
+const UPI_ID = "919014944750@axlm";
+const UPI_NAME = "Amatul Gaffar";
+const UPI_NOTE = "Just4You Ladies Gym Fee";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const WORKOUT_PLANS = {
@@ -67,9 +71,15 @@ function getExpiryStatus(expiry) {
   return null;
 }
 
+function getUPILink(amount) {
+  return `upi://pay?pa=${UPI_ID}&pn=${encodeURIComponent(UPI_NAME)}&am=${amount}&cu=INR&tn=${encodeURIComponent(UPI_NOTE)}`;
+}
+
 export default function MemberDashboard({ member, onLogout }) {
   const [weightHistory, setWeightHistory] = useState([]);
-  const [assessment, setAssessment] = useState(() => getMemberAssessment(member));
+  const [assessment, setAssessment] = useState(() => createDefaultAssessment(member));
+  const [assessmentHistory, setAssessmentHistory] = useState([]);
+  const [assessmentMsg, setAssessmentMsg] = useState("");
   const [memberPhoto, setMemberPhoto] = useState(() => getMemberPhoto(member?.id));
   const [photoBroken, setPhotoBroken] = useState(false);
   const [paymentHistory, setPaymentHistory] = useState([]);
@@ -107,10 +117,24 @@ export default function MemberDashboard({ member, onLogout }) {
       .eq("member_id", member.id)
       .order("submitted_at", { ascending: false })
       .then(({ data }) => setPaymentHistory(data || []));
+
+    fetchMemberAssessments(member)
+      .then((history) => {
+        setAssessmentHistory(history);
+        setAssessment(history[0] || createDefaultAssessment(member));
+        setAssessmentMsg("");
+      })
+      .catch((error) => {
+        setAssessmentHistory([]);
+        setAssessment(createDefaultAssessment(member));
+        setAssessmentMsg(`error:${error.message}`);
+      });
   }, [member?.id]);
 
   useEffect(() => {
-    setAssessment(getMemberAssessment(member));
+    setAssessment(createDefaultAssessment(member));
+    setAssessmentHistory([]);
+    setAssessmentMsg("");
     setMemberPhoto(getMemberPhoto(member?.id));
     setPhotoBroken(false);
     setPaymentForm({
@@ -126,6 +150,8 @@ export default function MemberDashboard({ member, onLogout }) {
   const latestPayment = paymentHistory[0] || null;
   const effectivePaymentStatus = latestPayment?.status || member.payment_status || "not submitted";
   const effectiveLastPaymentAmount = latestPayment?.amount || member.last_payment_amount || null;
+  const olderAssessments = assessmentHistory.filter((entry) => entry.id !== assessment.id);
+  const paymentAmount = Number.parseFloat(paymentForm.amount || member?.fee_amount || "0");
 
   async function submitPayment() {
     setPaymentMsg("");
@@ -181,6 +207,7 @@ export default function MemberDashboard({ member, onLogout }) {
       <style>{`
         @media(max-width:768px){
           .stats-3{grid-template-columns:1fr 1fr 1fr!important}
+          .payment-qr-grid{grid-template-columns:1fr!important}
         }
       `}</style>
 
@@ -257,12 +284,14 @@ export default function MemberDashboard({ member, onLogout }) {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
                 <div>
                   <h3 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 700 }}>Assessment Sheet</h3>
-                  <p style={{ margin: 0, color: "#7c6a9a", fontSize: 12 }}>Visible to you, editable from trainer access only.</p>
+                  <p style={{ margin: 0, color: "#7c6a9a", fontSize: 12 }}>Visible to you, editable from trainer access only. Your newest assessment shows first.</p>
                 </div>
                 {assessment.date && <span style={{ background: "#f3f0ff", color: "#6c3fc4", padding: "5px 12px", borderRadius: 20, fontSize: 12, fontWeight: 700 }}>{assessment.date}</span>}
               </div>
 
-              {!assessment.date && !assessment.bodyFat && !assessment.visceralFat && !assessment.bmr ? (
+              {assessmentMsg.startsWith("error:") ? (
+                <p style={{ color: "#dc2626", fontSize: 13 }}>{assessmentMsg.replace("error:", "")}</p>
+              ) : !assessmentHistory.length ? (
                 <p style={{ color: "#7c6a9a", fontSize: 13 }}>Your trainer has not added this assessment yet.</p>
               ) : (
                 <>
@@ -292,6 +321,33 @@ export default function MemberDashboard({ member, onLogout }) {
                         </p>
                       </div>
                     ))}
+                  </div>
+
+                  <div style={{ marginTop: 14, background: "#faf7ff", border: "1px solid #e0d7f5", borderRadius: 14, padding: 12 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: olderAssessments.length ? 10 : 0, flexWrap: "wrap" }}>
+                      <p style={{ margin: 0, color: "#6c3fc4", fontSize: 12, fontWeight: 800 }}>Assessment Timeline</p>
+                      <p style={{ margin: 0, color: "#7c6a9a", fontSize: 12 }}>{assessmentHistory.length} total record{assessmentHistory.length === 1 ? "" : "s"}</p>
+                    </div>
+                    {olderAssessments.length === 0 ? (
+                      <p style={{ margin: 0, color: "#7c6a9a", fontSize: 12 }}>Older monthly assessments will appear here as your trainer adds them.</p>
+                    ) : (
+                      <div style={{ display: "grid", gap: 8 }}>
+                        {olderAssessments.map((entry) => {
+                          const entryBMI = calcAssessmentBMI(entry.height, entry.weight);
+                          return (
+                            <div key={entry.id} style={{ background: "#fff", border: "1px solid #e0d7f5", borderRadius: 12, padding: 12 }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
+                                <p style={{ margin: 0, color: "#1e1030", fontSize: 13, fontWeight: 800 }}>{entry.date || "Undated assessment"}</p>
+                                <span style={{ background: "#f3f0ff", color: "#6c3fc4", padding: "4px 10px", borderRadius: 999, fontSize: 10, fontWeight: 700 }}>Previous</span>
+                              </div>
+                              <p style={{ margin: 0, color: "#7c6a9a", fontSize: 12, lineHeight: 1.6 }}>
+                                Weight {entry.weight || "-"} kg • Body Fat {entry.bodyFat || "-"}% • BMI {entryBMI || "-"}
+                              </p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </>
               )}
@@ -397,6 +453,39 @@ export default function MemberDashboard({ member, onLogout }) {
                     <p style={{ margin: 0, color: "#1e1030", fontSize: 15, fontWeight: 800 }}>{value}</p>
                   </div>
                 ))}
+              </div>
+
+              <div style={{ background: "#faf7ff", border: "1px solid #e0d7f5", borderRadius: 16, padding: 16, marginBottom: 14 }}>
+                <div className="payment-qr-grid" style={{ display: "grid", gridTemplateColumns: "180px 1fr", gap: 16, alignItems: "center" }}>
+                  <div style={{ background: "#fff", border: "1px solid #eadcf8", borderRadius: 16, padding: 12, textAlign: "center" }}>
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(getUPILink(paymentAmount > 0 ? paymentAmount : 0))}`}
+                      alt="Member payment QR"
+                      style={{ width: "100%", maxWidth: 180, borderRadius: 12, display: "block", margin: "0 auto 10px" }}
+                    />
+                    <p style={{ margin: 0, color: "#7c6a9a", fontSize: 11, fontWeight: 700 }}>SCAN TO PAY</p>
+                  </div>
+                  <div>
+                    <p style={{ margin: "0 0 6px", color: "#7a5db0", fontSize: 12, fontWeight: 800, letterSpacing: 0.6 }}>UPI PAYMENT QR</p>
+                    <h3 style={{ margin: "0 0 8px", color: "#1e1030", fontSize: 18, fontWeight: 800 }}>Pay first, then submit below</h3>
+                    <p style={{ margin: "0 0 12px", color: "#7c6a9a", fontSize: 13, lineHeight: 1.6 }}>
+                      Scan this QR with any UPI app. The QR updates to the amount you enter below so members can pay the exact fee.
+                    </p>
+                    <p style={{ margin: "0 0 6px", color: "#1e1030", fontSize: 13 }}><strong>UPI ID:</strong> {UPI_ID}</p>
+                    <p style={{ margin: "0 0 12px", color: "#1e1030", fontSize: 13 }}><strong>Name:</strong> {UPI_NAME}</p>
+                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                      <a
+                        href={getUPILink(paymentAmount > 0 ? paymentAmount : 0)}
+                        style={{ padding: "10px 16px", borderRadius: 12, background: "#efe5ff", color: "#6c3fc4", textDecoration: "none", fontWeight: 800, fontSize: 13 }}
+                      >
+                        Open UPI App
+                      </a>
+                      <span style={{ padding: "10px 14px", borderRadius: 12, background: "#fff", border: "1px solid #e0d7f5", color: "#7c6a9a", fontSize: 12, fontWeight: 700 }}>
+                        Amount: Rs. {Number(paymentAmount > 0 ? paymentAmount : 0).toLocaleString("en-IN")}
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <label style={{ fontSize: 12, fontWeight: 700, color: "#7a5db0", display: "block", marginBottom: 6 }}>PACKAGE TYPE</label>

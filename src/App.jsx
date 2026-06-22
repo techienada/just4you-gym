@@ -1,11 +1,22 @@
-import { useState, useEffect } from "react";
-import { supabase } from "./supabase";
-import TrainerDashboard from "./components/TrainerDashboard";
-import MemberDashboard from "./components/MemberDashboard";
-import Login from "./components/Login";
-import LandingPage from "./components/LandingPage";
-import TeaOrderPage from "./components/TeaOrderPage";
+import { lazy, Suspense, useEffect, useState } from "react";
 import "./App.css";
+
+const TrainerDashboard = lazy(() => import("./components/TrainerDashboard"));
+const MemberDashboard = lazy(() => import("./components/MemberDashboard"));
+const Login = lazy(() => import("./components/Login"));
+const LandingPage = lazy(() => import("./components/LandingPage"));
+const TeaOrderPage = lazy(() => import("./components/TeaOrderPage"));
+
+function AppShellLoader() {
+  return (
+    <div className="app-shell-loader">
+      <div className="app-shell-loader__card">
+        <div className="app-shell-loader__dot" />
+        <p>Loading Just4You...</p>
+      </div>
+    </div>
+  );
+}
 
 function App() {
   const [user, setUser] = useState(null);
@@ -26,11 +37,15 @@ function App() {
     setUser(null); setPage("landing");
   }
 
-  if (page === "landing") return <LandingPage onEnter={() => setPage("login")} onTeaPage={() => setPage("tea")} />;
-  if (page === "tea") return <TeaOrderPage onBack={() => setPage("landing")} onEnter={() => setPage("login")} />;
-  if (page === "login") return <Login onLogin={handleLogin} onBack={() => setPage("landing")} />;
-  if (user?.role === "trainer") return <TrainerDashboard onLogout={handleLogout} />;
-  if (user?.role === "member") return <MemberDashboard member={user.data} onLogout={handleLogout} />;
+  return (
+    <Suspense fallback={<AppShellLoader />}>
+      {page === "landing" && <LandingPage onEnter={() => setPage("login")} onTeaPage={() => setPage("tea")} />}
+      {page === "tea" && <TeaOrderPage onBack={() => setPage("landing")} onEnter={() => setPage("login")} />}
+      {page === "login" && <Login onLogin={handleLogin} onBack={() => setPage("landing")} />}
+      {page === "app" && user?.role === "trainer" && <TrainerDashboard onLogout={handleLogout} />}
+      {page === "app" && user?.role === "member" && <MemberDashboard member={user.data} onLogout={handleLogout} />}
+    </Suspense>
+  );
 }
 
 export default App;

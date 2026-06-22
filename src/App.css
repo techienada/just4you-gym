@@ -2,6 +2,33 @@
 html { scroll-behavior: smooth; }
 body { background: #f8f6ff; color: #1e1030; font-family: 'Segoe UI', sans-serif; }
 #root { animation: pageFadeIn 0.45s ease; }
+.app-shell-loader {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #f3f0ff, #f8f6ff, #ede8ff);
+}
+.app-shell-loader__card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 24px 28px;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid #e9ddfb;
+  box-shadow: 0 16px 40px rgba(108, 63, 196, 0.08);
+  color: #6743a4;
+  font-weight: 800;
+}
+.app-shell-loader__dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #9b7ed4, #6c3fc4);
+  animation: pulseDot 0.9s ease-in-out infinite alternate;
+}
 body, button, a, input, select, textarea, div, section, article, nav {
   transition:
     background-color 0.25s ease,
@@ -31,6 +58,17 @@ a:hover { opacity: 0.95; }
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes pulseDot {
+  from {
+    transform: scale(0.9);
+    opacity: 0.7;
+  }
+  to {
+    transform: scale(1.15);
+    opacity: 1;
   }
 }
 

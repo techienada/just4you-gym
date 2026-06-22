@@ -161,17 +161,17 @@ const styles = {
   navGroup: {
     display: "flex",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
     flexWrap: "wrap",
-    padding: 8,
-    borderRadius: 18,
-    background: "rgba(248, 246, 255, 0.9)",
-    border: "1px solid #e8def8",
-    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.85)",
+    padding: 5,
+    borderRadius: 14,
+    background: "#f7f3ff",
+    border: "1px solid #e5d9f8",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.9)",
   },
   navBtn: (active, danger) => ({
-    padding: "10px 15px",
-    borderRadius: 999,
+    padding: "9px 13px",
+    borderRadius: 10,
     border: "1px solid",
     borderColor: danger ? (active ? "#dc2626" : "#fecaca") : active ? "#8d64d2" : "#e2d6f5",
     background: danger
@@ -184,9 +184,10 @@ const styles = {
     color: danger ? (active ? "#fff" : "#dc2626") : active ? "#fff" : "#7c6a9a",
     fontWeight: 800,
     cursor: "pointer",
-    fontSize: 13,
-    minHeight: 42,
+    fontSize: 12,
+    minHeight: 38,
     boxShadow: active ? "0 10px 20px rgba(108,63,196,0.18)" : "0 1px 0 rgba(255,255,255,0.9)",
+    fontFamily: "inherit",
   }),
   btn: (active, danger) => ({
     padding: "10px 16px",
@@ -780,12 +781,15 @@ export default function TrainerDashboard({ onLogout }) {
         }
       `}</style>
 
-      <div className="t-header" style={{ background: "rgba(255,255,255,0.92)", borderBottom: "1px solid #e0d7f5", padding: "14px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: 76, boxShadow: "0 2px 14px rgba(108,63,196,0.08)", position: "sticky", top: 0, zIndex: 50, gap: 16, backdropFilter: "blur(10px)" }}>
-        <div style={{ minWidth: 180 }}>
+      <div className="t-header" style={{ background: "rgba(255,255,255,0.95)", borderBottom: "1px solid #e0d7f5", padding: "12px 22px", display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: 72, boxShadow: "0 2px 14px rgba(108,63,196,0.08)", position: "sticky", top: 0, zIndex: 50, gap: 18, backdropFilter: "blur(10px)" }}>
+        <div style={{ minWidth: 190, display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 34, height: 34, borderRadius: 10, background: "linear-gradient(135deg,#9b7ed4,#6c3fc4)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 900, boxShadow: "0 10px 22px rgba(108,63,196,0.18)" }}>J4Y</div>
+          <div>
           <h1 style={{ margin: 0, fontSize: 18, fontWeight: 900, color: "#6c3fc4", letterSpacing: "-0.02em" }}>Just4You Ladies Gym</h1>
           <p style={{ margin: "2px 0 0", fontSize: 11, color: "#7c6a9a" }}>Trainer Dashboard</p>
+          </div>
         </div>
-        <div className="t-nav-btns" style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", justifyContent: "flex-end" }}>
+        <div className="t-nav-btns" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
           <div style={styles.navGroup}>
             {[
               ["Members", "members"],
@@ -800,7 +804,8 @@ export default function TrainerDashboard({ onLogout }) {
               </button>
             ))}
           </div>
-          <button onClick={() => { setView("settings"); setMsg(""); }} style={styles.navBtn(view === "settings", false)}>
+          <button onClick={() => { setView("settings"); setMsg(""); }} style={{ ...styles.navBtn(view === "settings", false), display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ width: 22, height: 22, borderRadius: 8, background: view === "settings" ? "rgba(255,255,255,0.18)" : "#f3f0ff", color: view === "settings" ? "#fff" : "#6c3fc4", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 900 }}>T</span>
             Settings
           </button>
         </div>
@@ -1350,12 +1355,15 @@ export default function TrainerDashboard({ onLogout }) {
                 <button onClick={updateTrainerLogin} style={styles.btn(true)}>Save Trainer Login</button>
               </div>
 
-              <div style={{ ...styles.sectionCard, gridColumn: "1 / -1", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-                <div>
-                  <h3 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 700 }}>Session</h3>
-                  <p style={{ margin: 0, color: "#7c6a9a", fontSize: 12 }}>Use this when you want to leave the trainer dashboard on this device.</p>
+              <div style={{ ...styles.sectionCard, gridColumn: "1 / -1", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 18, flexWrap: "wrap", background: "linear-gradient(135deg,#fff7f7 0%,#ffffff 58%,#faf7ff 100%)", border: "1px solid #f3d6df" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                  <div style={{ width: 42, height: 42, borderRadius: 12, background: "#fff0f0", color: "#dc2626", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: 14 }}>OUT</div>
+                  <div>
+                    <h3 style={{ margin: "0 0 4px", fontSize: 16, fontWeight: 800, color: "#1e1030" }}>Trainer Session</h3>
+                    <p style={{ margin: 0, color: "#7c6a9a", fontSize: 12 }}>Log out from this device when the dashboard is not in use.</p>
+                  </div>
                 </div>
-                <button onClick={handleLogoutClick} style={styles.navBtn(false, true)}>
+                <button onClick={handleLogoutClick} style={{ ...styles.navBtn(false, true), minWidth: 120 }}>
                   Logout
                 </button>
               </div>

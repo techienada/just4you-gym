@@ -1,4 +1,4 @@
-const STORAGE_KEY = "just4you_member_assessments";
+import { supabase } from "./supabase";
 
 export const ASSESSMENT_FIELDS = [
   { key: "date", label: "Assessment Date", type: "date" },
@@ -14,30 +14,23 @@ export const ASSESSMENT_FIELDS = [
   { key: "remarks", label: "Trainer Remarks", type: "textarea" },
 ];
 
-function readAssessmentStore() {
-  if (typeof window === "undefined") return {};
-  try {
-    const saved = window.localStorage.getItem(STORAGE_KEY);
-    return saved ? JSON.parse(saved) : {};
-  } catch {
-    return {};
+function createAssessmentId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
   }
+  return `assessment_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function writeAssessmentStore(store) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
-}
-
-export function createDefaultAssessment(member = {}) {
+export function createDefaultAssessment(member = {}, previousAssessment = {}) {
   return {
+    id: createAssessmentId(),
     date: new Date().toISOString().split("T")[0],
-    height: member.height ? String(member.height) : "",
-    weight: member.weight ? String(member.weight) : "",
+    height: previousAssessment.height || (member.height ? String(member.height) : ""),
+    weight: previousAssessment.weight || (member.weight ? String(member.weight) : ""),
     bodyFat: "",
     visceralFat: "",
     bmr: "",
-    bodyAge: member.age ? String(member.age) : "",
+    bodyAge: previousAssessment.bodyAge || (member.age ? String(member.age) : ""),
     trunkFat: "",
     skeletalMuscle: "",
     profileNote: "",
@@ -45,23 +38,97 @@ export function createDefaultAssessment(member = {}) {
   };
 }
 
-export function getMemberAssessment(member = {}) {
-  const store = readAssessmentStore();
-  const saved = member?.id ? store[member.id] : null;
+function normalizeAssessmentEntry(entry = {}, member = {}) {
+  const fallback = createDefaultAssessment(member);
   return {
-    ...createDefaultAssessment(member),
-    ...(saved || {}),
+    ...fallback,
+    ...(entry || {}),
+    id: entry?.id || fallback.id,
+    date: entry?.date || fallback.date,
   };
 }
 
-export function saveMemberAssessment(memberId, assessment) {
-  if (!memberId) return;
-  const store = readAssessmentStore();
-  store[memberId] = {
-    ...assessment,
+function sortAssessments(list = []) {
+  return [...list].sort((a, b) => {
+    const dateDiff = new Date(b.date || 0) - new Date(a.date || 0);
+    if (dateDiff !== 0) return dateDiff;
+    return new Date(b.updated_at || 0) - new Date(a.updated_at || 0);
+  });
+}
+
+function mapDbRowToAssessment(row = {}, member = {}) {
+  return normalizeAssessmentEntry({
+    id: row.id,
+    date: row.assessment_date,
+    height: row.height != null ? String(row.height) : "",
+    weight: row.weight != null ? String(row.weight) : "",
+    bodyFat: row.body_fat != null ? String(row.body_fat) : "",
+    visceralFat: row.visceral_fat != null ? String(row.visceral_fat) : "",
+    bmr: row.bmr != null ? String(row.bmr) : "",
+    bodyAge: row.body_age != null ? String(row.body_age) : "",
+    trunkFat: row.trunk_fat != null ? String(row.trunk_fat) : "",
+    skeletalMuscle: row.skeletal_muscle != null ? String(row.skeletal_muscle) : "",
+    profileNote: row.profile_note || "",
+    remarks: row.remarks || "",
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  }, member);
+}
+
+function mapAssessmentToDbRow(memberId, assessment = {}) {
+  const toNumber = (value) => {
+    if (value === "" || value == null) return null;
+    const num = Number(value);
+    return Number.isFinite(num) ? num : null;
+  };
+
+  return {
+    id: assessment.id,
+    member_id: memberId,
+    assessment_date: assessment.date || new Date().toISOString().split("T")[0],
+    height: toNumber(assessment.height),
+    weight: toNumber(assessment.weight),
+    body_fat: toNumber(assessment.bodyFat),
+    visceral_fat: toNumber(assessment.visceralFat),
+    bmr: toNumber(assessment.bmr),
+    body_age: toNumber(assessment.bodyAge),
+    trunk_fat: toNumber(assessment.trunkFat),
+    skeletal_muscle: toNumber(assessment.skeletalMuscle),
+    profile_note: assessment.profileNote || null,
+    remarks: assessment.remarks || null,
     updated_at: new Date().toISOString(),
   };
-  writeAssessmentStore(store);
+}
+
+export async function fetchMemberAssessments(member = {}) {
+  if (!member?.id) return [];
+  const { data, error } = await supabase
+    .from("assessment_history")
+    .select("*")
+    .eq("member_id", member.id)
+    .order("assessment_date", { ascending: false })
+    .order("updated_at", { ascending: false });
+
+  if (error) {
+    throw error;
+  }
+
+  return sortAssessments((data || []).map((row) => mapDbRowToAssessment(row, member)));
+}
+
+export async function fetchLatestMemberAssessment(member = {}) {
+  const assessments = await fetchMemberAssessments(member);
+  return assessments[0] || createDefaultAssessment(member);
+}
+
+export async function saveMemberAssessment(memberId, assessment, member = {}) {
+  if (!memberId) return [];
+  const payload = mapAssessmentToDbRow(memberId, normalizeAssessmentEntry(assessment, member));
+  const { error } = await supabase.from("assessment_history").upsert([payload], { onConflict: "id" });
+  if (error) {
+    throw error;
+  }
+  return fetchMemberAssessments({ ...member, id: memberId });
 }
 
 export function calcAssessmentBMI(height, weight) {
