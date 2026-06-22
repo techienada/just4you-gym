@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../supabase";
 import { fetchTrainerAuth, getTrainerAuth, saveTrainerAuth } from "../trainerAuth";
-import { ASSESSMENT_FIELDS, calcAssessmentBMI, createDefaultAssessment, getAssessmentBMICategory, getBodyFatStatus, getMemberAssessment, saveMemberAssessment } from "../memberAssessments";
+import { ASSESSMENT_FIELDS, calcAssessmentBMI, createDefaultAssessment, fetchMemberAssessments, getAssessmentBMICategory, getBodyFatStatus, saveMemberAssessment } from "../memberAssessments";
 import { getMemberPhoto, removeMemberPhoto, saveMemberPhoto } from "../memberPhotos";
 import { parseTeaNotes, updateTeaNotesPaymentStatus } from "../teaOrderMeta";
 
@@ -158,6 +158,36 @@ const styles = {
     marginBottom: 12,
     fontFamily: "inherit",
   },
+  navGroup: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+    padding: 8,
+    borderRadius: 18,
+    background: "rgba(248, 246, 255, 0.9)",
+    border: "1px solid #e8def8",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.85)",
+  },
+  navBtn: (active, danger) => ({
+    padding: "10px 15px",
+    borderRadius: 999,
+    border: "1px solid",
+    borderColor: danger ? (active ? "#dc2626" : "#fecaca") : active ? "#8d64d2" : "#e2d6f5",
+    background: danger
+      ? active
+        ? "linear-gradient(135deg,#ef4444,#dc2626)"
+        : "#fff7f7"
+      : active
+        ? "linear-gradient(135deg,#a88ae1,#6c3fc4)"
+        : "#fff",
+    color: danger ? (active ? "#fff" : "#dc2626") : active ? "#fff" : "#7c6a9a",
+    fontWeight: 800,
+    cursor: "pointer",
+    fontSize: 13,
+    minHeight: 42,
+    boxShadow: active ? "0 10px 20px rgba(108,63,196,0.18)" : "0 1px 0 rgba(255,255,255,0.9)",
+  }),
   btn: (active, danger) => ({
     padding: "10px 16px",
     borderRadius: 10,
@@ -169,6 +199,13 @@ const styles = {
     fontSize: 13,
     fontFamily: "inherit",
   }),
+  sectionCard: {
+    background: "linear-gradient(180deg, #ffffff 0%, #fcfaff 100%)",
+    border: "1px solid #e6dbf7",
+    borderRadius: 18,
+    padding: 20,
+    boxShadow: "0 10px 30px rgba(108,63,196,0.07)",
+  },
   label: {
     fontSize: 12,
     fontWeight: 600,
@@ -286,6 +323,7 @@ export default function TrainerDashboard({ onLogout }) {
   const [todayAttendance, setTodayAttendance] = useState([]);
   const [teaOrders, setTeaOrders] = useState([]);
   const [assessmentForm, setAssessmentForm] = useState(() => createDefaultAssessment());
+  const [assessmentHistory, setAssessmentHistory] = useState([]);
   const [selectedPhoto, setSelectedPhoto] = useState("");
   const [selectedPhotoBroken, setSelectedPhotoBroken] = useState(false);
   const [photoErrors, setPhotoErrors] = useState({});
@@ -381,6 +419,12 @@ export default function TrainerDashboard({ onLogout }) {
     setSettingsMsg("success");
   }
 
+  function handleLogoutClick() {
+    if (window.confirm("Log out of the trainer dashboard?")) {
+      onLogout();
+    }
+  }
+
   async function fetchMembers() {
     setLoading(true);
     const { data } = await supabase.from("members").select("*").order("created_at", { ascending: false });
@@ -403,15 +447,23 @@ export default function TrainerDashboard({ onLogout }) {
 
   async function openMember(member) {
     setSelected(member);
-    setAssessmentForm(getMemberAssessment(member));
+    setAssessmentHistory([]);
+    setAssessmentForm(createDefaultAssessment(member));
     setAssessmentMsg("");
     setSelectedPhoto(getMemberPhoto(member.id));
     setSelectedPhotoBroken(false);
     setPhotoMsg("");
-    const [wh, att] = await Promise.all([
+    const [assessmentResult, wh, att] = await Promise.all([
+      fetchMemberAssessments(member).catch((error) => ({ error })),
       supabase.from("weight_history").select("*").eq("member_id", member.id).order("recorded_at", { ascending: true }),
       supabase.from("attendance").select("*").eq("member_id", member.id).order("date", { ascending: false }).limit(10),
     ]);
+    if (assessmentResult?.error) {
+      setAssessmentMsg(`error:${assessmentResult.error.message}`);
+    } else {
+      setAssessmentHistory(assessmentResult);
+      setAssessmentForm(assessmentResult[0] || createDefaultAssessment(member));
+    }
     setWeightHistory(wh.data || []);
     setAttendance(att.data || []);
     setView("detail");
@@ -592,10 +644,28 @@ export default function TrainerDashboard({ onLogout }) {
     setAssessmentForm((current) => ({ ...current, [key]: value }));
   }
 
-  function saveAssessment() {
+  function startNewAssessment() {
     if (!selected) return;
-    saveMemberAssessment(selected.id, assessmentForm);
-    setAssessmentMsg("success");
+    const previousAssessment = assessmentHistory[0] || assessmentForm;
+    setAssessmentForm(createDefaultAssessment(selected, previousAssessment));
+    setAssessmentMsg("");
+  }
+
+  function loadAssessmentRecord(entry) {
+    setAssessmentForm(entry);
+    setAssessmentMsg("");
+  }
+
+  async function saveAssessment() {
+    if (!selected) return;
+    try {
+      const nextHistory = await saveMemberAssessment(selected.id, assessmentForm, selected);
+      setAssessmentHistory(nextHistory);
+      setAssessmentForm(nextHistory.find((entry) => entry.id === assessmentForm.id) || nextHistory[0] || assessmentForm);
+      setAssessmentMsg("success");
+    } catch (error) {
+      setAssessmentMsg(`error:${error.message || "Could not save assessment."}`);
+    }
   }
 
   async function handlePhotoChange(event) {
@@ -710,26 +780,29 @@ export default function TrainerDashboard({ onLogout }) {
         }
       `}</style>
 
-      <div className="t-header" style={{ background: "#fff", borderBottom: "1px solid #e0d7f5", padding: "0 24px", display: "flex", justifyContent: "space-between", alignItems: "center", height: 64, boxShadow: "0 2px 12px rgba(108,63,196,0.08)", position: "sticky", top: 0, zIndex: 50 }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: "#6c3fc4" }}>Just4You Ladies Gym</h1>
-          <p style={{ margin: 0, fontSize: 10, color: "#7c6a9a" }}>Trainer Dashboard</p>
+      <div className="t-header" style={{ background: "rgba(255,255,255,0.92)", borderBottom: "1px solid #e0d7f5", padding: "14px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: 76, boxShadow: "0 2px 14px rgba(108,63,196,0.08)", position: "sticky", top: 0, zIndex: 50, gap: 16, backdropFilter: "blur(10px)" }}>
+        <div style={{ minWidth: 180 }}>
+          <h1 style={{ margin: 0, fontSize: 18, fontWeight: 900, color: "#6c3fc4", letterSpacing: "-0.02em" }}>Just4You Ladies Gym</h1>
+          <p style={{ margin: "2px 0 0", fontSize: 11, color: "#7c6a9a" }}>Trainer Dashboard</p>
         </div>
-        <div className="t-nav-btns" style={{ display: "flex", gap: 8 }}>
-          {[
-            ["Members", "members"],
-            ["Add Member", "add"],
-            ["Attendance", "attendance"],
-            ["Renewals", "renewals"],
-            ["Payments", "payments"],
-            ["Tea Orders", "teaorders"],
-            ["Settings", "settings"],
-          ].map(([label, target]) => (
-            <button key={target} onClick={() => { setView(target); setMsg(""); }} style={styles.btn(view === target)}>
-              {label}
-            </button>
-          ))}
-          <button onClick={onLogout} style={{ ...styles.btn(false, true), color: "#dc2626" }}>Logout</button>
+        <div className="t-nav-btns" style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <div style={styles.navGroup}>
+            {[
+              ["Members", "members"],
+              ["Add Member", "add"],
+              ["Attendance", "attendance"],
+              ["Renewals", "renewals"],
+              ["Payments", "payments"],
+              ["Tea Orders", "teaorders"],
+            ].map(([label, target]) => (
+              <button key={target} onClick={() => { setView(target); setMsg(""); }} style={styles.navBtn(view === target, false)}>
+                {label}
+              </button>
+            ))}
+          </div>
+          <button onClick={() => { setView("settings"); setMsg(""); }} style={styles.navBtn(view === "settings", false)}>
+            Settings
+          </button>
         </div>
       </div>
 
@@ -742,16 +815,12 @@ export default function TrainerDashboard({ onLogout }) {
           ["Pay", "payments"],
           ["Tea", "teaorders"],
           ["Settings", "settings"],
-          ["Logout", "logout"],
         ].map(([label, target]) => (
           <button
             key={target}
             onClick={() => {
-              if (target === "logout") onLogout();
-              else {
-                setView(target);
-                setMsg("");
-              }
+              setView(target);
+              setMsg("");
             }}
             style={{
               flex: 1,
@@ -1243,13 +1312,13 @@ export default function TrainerDashboard({ onLogout }) {
 
         {view === "settings" && (
           <div>
-            <div style={{ marginBottom: 16 }}>
-              <h2 style={{ margin: "0 0 4px", fontSize: 22, fontWeight: 800 }}>Trainer Settings</h2>
-              <p style={{ margin: 0, color: "#7c6a9a", fontSize: 13 }}>Change the trainer login used on the shared login screen.</p>
+            <div style={{ marginBottom: 18 }}>
+              <h2 style={{ margin: "0 0 6px", fontSize: 24, fontWeight: 900, letterSpacing: "-0.02em" }}>Trainer Settings</h2>
+              <p style={{ margin: 0, color: "#7c6a9a", fontSize: 13 }}>Keep the shared login updated and log out from one clean place.</p>
             </div>
 
             <div className="t-two-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-              <div style={styles.card}>
+              <div style={styles.sectionCard}>
                 <h3 style={{ margin: "0 0 14px", fontSize: 15, fontWeight: 700 }}>Current Login</h3>
                 <div style={{ background: "#f8f6ff", border: "1px solid #e0d7f5", borderRadius: 12, padding: 14, marginBottom: 14 }}>
                   <p style={{ margin: "0 0 6px", color: "#7c6a9a", fontSize: 12 }}>Username</p>
@@ -1260,7 +1329,7 @@ export default function TrainerDashboard({ onLogout }) {
                 <p style={{ margin: 0, color: "#7c6a9a", fontSize: 12 }}>Changes here take effect immediately on the login page.</p>
               </div>
 
-              <div style={styles.card}>
+              <div style={styles.sectionCard}>
                 <h3 style={{ margin: "0 0 14px", fontSize: 15, fontWeight: 700 }}>Change Trainer Login</h3>
                 <label style={styles.label}>TRAINER USERNAME</label>
                 <input
@@ -1279,6 +1348,16 @@ export default function TrainerDashboard({ onLogout }) {
                 {settingsMsg === "success" && <div style={{ background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 10, padding: "12px 14px", marginBottom: 12, color: "#166534", fontSize: 13 }}>Trainer login updated successfully.</div>}
                 {settingsMsg.startsWith("error:") && <div style={{ background: "#fff0f0", border: "1px solid #fca5a5", borderRadius: 10, padding: "12px 14px", marginBottom: 12, color: "#dc2626", fontSize: 13 }}>{settingsMsg.replace("error:", "")}</div>}
                 <button onClick={updateTrainerLogin} style={styles.btn(true)}>Save Trainer Login</button>
+              </div>
+
+              <div style={{ ...styles.sectionCard, gridColumn: "1 / -1", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+                <div>
+                  <h3 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 700 }}>Session</h3>
+                  <p style={{ margin: 0, color: "#7c6a9a", fontSize: 12 }}>Use this when you want to leave the trainer dashboard on this device.</p>
+                </div>
+                <button onClick={handleLogoutClick} style={styles.navBtn(false, true)}>
+                  Logout
+                </button>
               </div>
             </div>
           </div>
@@ -1447,9 +1526,58 @@ export default function TrainerDashboard({ onLogout }) {
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
                       <div>
                         <h3 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 700 }}>Assessment Sheet</h3>
-                        <p style={{ margin: 0, color: "#7c6a9a", fontSize: 12 }}>Trainer can update this. Members can only view it.</p>
+                        <p style={{ margin: 0, color: "#7c6a9a", fontSize: 12 }}>Trainer can update this. Members can only view it. Add a fresh record every month to keep a proper timeline.</p>
                       </div>
-                      {assessmentForm.date && <span style={{ background: "#f3f0ff", color: "#6c3fc4", padding: "5px 12px", borderRadius: 20, fontSize: 12, fontWeight: 700 }}>{assessmentForm.date}</span>}
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        {assessmentForm.date && <span style={{ background: "#f3f0ff", color: "#6c3fc4", padding: "5px 12px", borderRadius: 20, fontSize: 12, fontWeight: 700 }}>{assessmentForm.date}</span>}
+                        <button onClick={startNewAssessment} style={{ ...styles.btn(false), padding: "8px 14px" }}>New Monthly Record</button>
+                      </div>
+                    </div>
+
+                    <div style={{ background: "#faf7ff", border: "1px solid #e0d7f5", borderRadius: 14, padding: 12, marginBottom: 14 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: assessmentHistory.length ? 10 : 0 }}>
+                        <p style={{ margin: 0, color: "#6c3fc4", fontSize: 12, fontWeight: 800 }}>Assessment History</p>
+                        <p style={{ margin: 0, color: "#7c6a9a", fontSize: 12 }}>{assessmentHistory.length} saved record{assessmentHistory.length === 1 ? "" : "s"}</p>
+                      </div>
+                      {assessmentHistory.length === 0 ? (
+                        <p style={{ margin: 0, color: "#7c6a9a", fontSize: 12 }}>No previous assessments yet. Save the first one for this member.</p>
+                      ) : (
+                        <div style={{ display: "grid", gap: 8 }}>
+                          {assessmentHistory.map((entry, index) => {
+                            const active = entry.id === assessmentForm.id;
+                            return (
+                              <button
+                                key={entry.id}
+                                onClick={() => loadAssessmentRecord(entry)}
+                                style={{
+                                  width: "100%",
+                                  textAlign: "left",
+                                  borderRadius: 12,
+                                  border: active ? "2px solid #9b7ed4" : "1px solid #e0d7f5",
+                                  background: active ? "#f3f0ff" : "#fff",
+                                  padding: "10px 12px",
+                                  cursor: "pointer",
+                                  transition: "all 0.2s ease",
+                                }}
+                              >
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                                  <div>
+                                    <p style={{ margin: "0 0 3px", color: "#1e1030", fontSize: 13, fontWeight: 800 }}>
+                                      {entry.date || "Undated assessment"} {index === 0 ? "• Latest" : ""}
+                                    </p>
+                                    <p style={{ margin: 0, color: "#7c6a9a", fontSize: 11 }}>
+                                      Weight {entry.weight || "-"} kg • Body Fat {entry.bodyFat || "-"}%
+                                    </p>
+                                  </div>
+                                  <span style={{ background: active ? "#9b7ed4" : "#f3f0ff", color: active ? "#fff" : "#6c3fc4", padding: "4px 10px", borderRadius: 999, fontSize: 10, fontWeight: 700 }}>
+                                    {active ? "Open" : "View"}
+                                  </span>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
 
                     <div className="t-two-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
@@ -1491,6 +1619,7 @@ export default function TrainerDashboard({ onLogout }) {
                     </div>
 
                     {assessmentMsg === "success" && <div style={{ background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 10, padding: "12px 14px", marginBottom: 12, color: "#166534", fontSize: 13 }}>Assessment saved for this member.</div>}
+                    {assessmentMsg.startsWith("error:") && <div style={{ background: "#fff0f0", border: "1px solid #fca5a5", borderRadius: 10, padding: "12px 14px", marginBottom: 12, color: "#dc2626", fontSize: 13 }}>{assessmentMsg.replace("error:", "")}</div>}
                     <button onClick={saveAssessment} style={styles.btn(true)}>Save Assessment</button>
                   </div>
 
