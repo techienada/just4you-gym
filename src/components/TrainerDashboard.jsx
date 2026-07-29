@@ -154,6 +154,49 @@ function renderTeaOrderPrintCard(order, paymentStatus) {
   `;
 }
 
+const TRAINER_THEMES = {
+  lavender: {
+    label: "Lavender",
+    page: "#f8f6ff",
+    primary: "#6c3fc4",
+    primarySoft: "#f3f0ff",
+    primaryMid: "#9b7ed4",
+    border: "#e0d7f5",
+    text: "#1e1030",
+    muted: "#7c6a9a",
+  },
+  rose: {
+    label: "Rose",
+    page: "#fff7fb",
+    primary: "#be185d",
+    primarySoft: "#fce7f3",
+    primaryMid: "#ec4899",
+    border: "#fbcfe8",
+    text: "#2a1020",
+    muted: "#8a5b74",
+  },
+  teal: {
+    label: "Teal",
+    page: "#f0fdfa",
+    primary: "#0f766e",
+    primarySoft: "#ccfbf1",
+    primaryMid: "#14b8a6",
+    border: "#99f6e4",
+    text: "#102a27",
+    muted: "#527a75",
+  },
+  gold: {
+    label: "Gold",
+    page: "#fffbeb",
+    primary: "#b45309",
+    primarySoft: "#fef3c7",
+    primaryMid: "#f59e0b",
+    border: "#fde68a",
+    text: "#2b1d0b",
+    muted: "#806a45",
+  },
+};
+
 const styles = {
   card: {
     background: "#fff",
@@ -183,22 +226,22 @@ const styles = {
     padding: 6,
     borderRadius: 12,
     background: "#fff",
-    border: "1px solid #e0d7f5",
-    boxShadow: "0 8px 24px rgba(108,63,196,0.08)",
+    border: "1px solid var(--trainer-border)",
+    boxShadow: "0 8px 24px var(--trainer-shadow)",
   },
   navBtn: (active, danger) => ({
     padding: "10px 14px",
     borderRadius: 8,
     border: "1px solid",
-    borderColor: danger ? (active ? "#dc2626" : "#fecaca") : active ? "#6c3fc4" : "transparent",
+    borderColor: danger ? (active ? "#dc2626" : "#fecaca") : active ? "var(--trainer-primary)" : "transparent",
     background: danger
       ? active
         ? "linear-gradient(135deg,#ef4444,#dc2626)"
         : "#fff7f7"
       : active
-        ? "#f3f0ff"
+        ? "var(--trainer-soft)"
         : "transparent",
-    color: danger ? (active ? "#fff" : "#dc2626") : active ? "#6c3fc4" : "#5f527a",
+    color: danger ? (active ? "#fff" : "#dc2626") : active ? "var(--trainer-primary)" : "var(--trainer-muted)",
     fontWeight: 800,
     cursor: "pointer",
     fontSize: 13,
@@ -221,7 +264,7 @@ const styles = {
   }),
   actionBtn: (variant = "neutral") => {
     const palette = {
-      primary: { bg: "#f3f0ff", color: "#6c3fc4", border: "#d9ccf2" },
+      primary: { bg: "var(--trainer-soft)", color: "var(--trainer-primary)", border: "var(--trainer-border)" },
       success: { bg: "#f0fdf4", color: "#16a34a", border: "#bbf7d0" },
       warning: { bg: "#fffbeb", color: "#d97706", border: "#fde68a" },
       danger: { bg: "#fef2f2", color: "#dc2626", border: "#fecaca" },
@@ -249,9 +292,9 @@ const styles = {
   choiceBtn: (active) => ({
     padding: "9px 10px",
     borderRadius: 8,
-    border: active ? "1px solid #6c3fc4" : "1px solid #e0d7f5",
-    background: active ? "#f3f0ff" : "#fff",
-    color: active ? "#6c3fc4" : "#6b5f86",
+    border: active ? "1px solid var(--trainer-primary)" : "1px solid var(--trainer-border)",
+    background: active ? "var(--trainer-soft)" : "#fff",
+    color: active ? "var(--trainer-primary)" : "var(--trainer-muted)",
     fontWeight: 800,
     cursor: "pointer",
     fontSize: 12,
@@ -377,8 +420,12 @@ export default function TrainerDashboard({ onLogout }) {
   const [view, setView] = useState("members");
   const [loading, setLoading] = useState(true);
   const [teaLoading, setTeaLoading] = useState(true);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [openTeaMenuId, setOpenTeaMenuId] = useState(null);
   const [weightHistory, setWeightHistory] = useState([]);
   const [teaOrders, setTeaOrders] = useState([]);
+  const [financePayments, setFinancePayments] = useState([]);
+  const [financeFilter, setFinanceFilter] = useState("all");
   const [assessmentForm, setAssessmentForm] = useState(() => createDefaultAssessment());
   const [assessmentHistory, setAssessmentHistory] = useState([]);
   const [selectedPhoto, setSelectedPhoto] = useState("");
@@ -394,6 +441,7 @@ export default function TrainerDashboard({ onLogout }) {
   const [teaSearch, setTeaSearch] = useState("");
   const [renewalStatus, setRenewalStatus] = useState({});
   const [teaOrderMeta, setTeaOrderMeta] = useState({});
+  const [trainerThemeName, setTrainerThemeName] = useState(() => localStorage.getItem("just4you_trainer_theme") || "lavender");
   const [trainerAuth, setTrainerAuth] = useState(() => getTrainerAuth());
   const [msg, setMsg] = useState("");
   const [settingsMsg, setSettingsMsg] = useState("");
@@ -419,6 +467,7 @@ export default function TrainerDashboard({ onLogout }) {
   useEffect(() => {
     fetchMembers();
     fetchTeaOrders();
+    fetchFinancePayments();
     loadRenewalStatus();
     loadTeaOrderMeta();
     loadTrainerCredentials();
@@ -496,6 +545,11 @@ export default function TrainerDashboard({ onLogout }) {
     const { data } = await supabase.from("tea_orders").select("*").order("created_at", { ascending: false });
     setTeaOrders(data || []);
     setTeaLoading(false);
+  }
+
+  async function fetchFinancePayments() {
+    const { data } = await supabase.from("upi_payments").select("*").order("submitted_at", { ascending: false });
+    setFinancePayments(data || []);
   }
 
   async function openMember(member) {
@@ -670,6 +724,17 @@ export default function TrainerDashboard({ onLogout }) {
     setTeaOrders((prev) => prev.map((order) => (order.id === orderId ? { ...order, status } : order)));
   }
 
+  async function deleteTeaOrder(order) {
+    const label = order.customer_name || order.product_name || "this tea order";
+    if (!window.confirm(`Delete ${label}? This cannot be undone.`)) return;
+    const { error } = await supabase.from("tea_orders").delete().eq("id", order.id);
+    if (error) {
+      window.alert(error.message || "Could not delete this tea order.");
+      return;
+    }
+    setTeaOrders((prev) => prev.filter((item) => item.id !== order.id));
+  }
+
   function getTeaPaymentStatus(order) {
     return order.payment_status || parseTeaNotes(order.notes).paymentStatus || (order.payment_method === "cod" ? "pending" : "paid");
   }
@@ -840,76 +905,112 @@ export default function TrainerDashboard({ onLogout }) {
     const matchesSearch = haystack.includes(teaSearch.toLowerCase());
     return matchesStatus && matchesPayment && matchesSearch;
   });
+  const financeRows = [
+    ...financePayments.map((payment) => ({
+      id: `membership-${payment.id}`,
+      type: "membership",
+      label: "Gym Membership",
+      name: payment.member_name || "Member payment",
+      amount: Number(payment.amount || 0),
+      status: payment.status || "pending",
+      method: "UPI",
+      date: payment.confirmed_at || payment.submitted_at || payment.created_at,
+      detail: payment.package_type || "-",
+    })),
+  ].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+  const filteredFinanceRows = financeRows.filter((row) => financeFilter === "all" || row.status === financeFilter);
+  const financeTotal = filteredFinanceRows.reduce((sum, row) => sum + row.amount, 0);
+  const financePaidTotal = filteredFinanceRows
+    .filter((row) => row.status === "paid" || row.status === "confirmed")
+    .reduce((sum, row) => sum + row.amount, 0);
+  const financePendingTotal = filteredFinanceRows
+    .filter((row) => row.status !== "paid" && row.status !== "confirmed")
+    .reduce((sum, row) => sum + row.amount, 0);
   const trainerMenuItems = [
     ["Members", "members"],
     ["Add", "add"],
     ["Renewals", "renewals"],
     ["Payments", "payments"],
     ["Tea", "teaorders"],
+    ["Finance", "finance"],
     ["Settings", "settings"],
   ];
+  const trainerTheme = TRAINER_THEMES[trainerThemeName] || TRAINER_THEMES.lavender;
+  const trainerThemeVars = {
+    "--trainer-page": trainerTheme.page,
+    "--trainer-primary": trainerTheme.primary,
+    "--trainer-soft": trainerTheme.primarySoft,
+    "--trainer-mid": trainerTheme.primaryMid,
+    "--trainer-border": trainerTheme.border,
+    "--trainer-text": trainerTheme.text,
+    "--trainer-muted": trainerTheme.muted,
+    "--trainer-shadow": `${trainerTheme.primary}18`,
+  };
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f8f6ff", fontFamily: "'Segoe UI',sans-serif", color: "#1e1030" }}>
+    <div style={{ ...trainerThemeVars, minHeight: "100vh", background: "var(--trainer-page)", fontFamily: "'Segoe UI',sans-serif", color: "var(--trainer-text)" }}>
       <style>{`
         @media(max-width:768px){
-          .t-header{padding:12px!important;height:auto!important;flex-wrap:wrap;gap:10px}
-          .t-nav-btns{display:none!important}
-          .t-mobile-tabs{display:flex!important}
+          .t-header{padding:12px!important;height:auto!important;gap:10px}
           .t-four-grid{grid-template-columns:1fr 1fr!important}
           .t-two-grid{grid-template-columns:1fr!important}
-          .t-body{padding:16px 12px 90px!important}
+          .t-body{padding:16px 12px 40px!important}
           .t-row{flex-direction:column!important;align-items:stretch!important}
-        }
-        @media(min-width:769px){
-          .t-mobile-tabs{display:none!important}
         }
       `}</style>
 
       <div className="t-header" style={{ background: "rgba(255,255,255,0.95)", borderBottom: "1px solid #e0d7f5", padding: "12px 22px", display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: 72, boxShadow: "0 2px 14px rgba(108,63,196,0.08)", position: "sticky", top: 0, zIndex: 50, gap: 18, backdropFilter: "blur(10px)" }}>
         <div style={{ minWidth: 190, display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 34, height: 34, borderRadius: 10, background: "linear-gradient(135deg,#9b7ed4,#6c3fc4)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 900, boxShadow: "0 10px 22px rgba(108,63,196,0.18)" }}>J4Y</div>
+          <div style={{ width: 34, height: 34, borderRadius: 10, background: "linear-gradient(135deg,var(--trainer-mid),var(--trainer-primary))", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 900, boxShadow: "0 10px 22px var(--trainer-shadow)" }}>J4Y</div>
           <div>
-          <h1 style={{ margin: 0, fontSize: 18, fontWeight: 900, color: "#6c3fc4", letterSpacing: "-0.02em" }}>Just4You Ladies Gym</h1>
-          <p style={{ margin: "2px 0 0", fontSize: 11, color: "#7c6a9a" }}>Trainer Dashboard</p>
+          <h1 style={{ margin: 0, fontSize: 18, fontWeight: 900, color: "var(--trainer-primary)", letterSpacing: "-0.02em" }}>Just4You Ladies Gym</h1>
+          <p style={{ margin: "2px 0 0", fontSize: 11, color: "var(--trainer-muted)" }}>Trainer Dashboard</p>
           </div>
         </div>
-        <div className="t-nav-btns" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
-          <div style={styles.navGroup}>
-            {trainerMenuItems.map(([label, target]) => (
-              <button key={target} onClick={() => { setView(target); setMsg(""); }} style={styles.navBtn(view === target, false)}>
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
+        <button
+          aria-label="Open trainer menu"
+          onClick={() => setMenuOpen(true)}
+          style={{ width: 42, height: 42, borderRadius: 10, border: "1px solid var(--trainer-border)", background: "#fff", color: "var(--trainer-primary)", cursor: "pointer", display: "inline-flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 5, boxShadow: "0 8px 18px var(--trainer-shadow)" }}
+        >
+          <span style={{ width: 18, height: 2, borderRadius: 999, background: "currentColor" }} />
+          <span style={{ width: 18, height: 2, borderRadius: 999, background: "currentColor" }} />
+          <span style={{ width: 18, height: 2, borderRadius: 999, background: "currentColor" }} />
+        </button>
       </div>
 
-      <div className="t-mobile-tabs" style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "#fff", borderTop: "1px solid #e0d7f5", padding: "8px 10px", zIndex: 50, gap: 6, justifyContent: "space-around", boxShadow: "0 -2px 12px rgba(108,63,196,0.1)", overflowX: "auto" }}>
-        {trainerMenuItems.map(([label, target]) => (
+      {menuOpen && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 100 }}>
           <button
-            key={target}
-            onClick={() => {
-              setView(target);
-              setMsg("");
-            }}
-            style={{
-              flex: "0 0 auto",
-              padding: "9px 11px",
-              borderRadius: 8,
-              border: view === target ? "1px solid #6c3fc4" : "1px solid #e0d7f5",
-              background: view === target ? "#f3f0ff" : "#fff",
-              color: view === target ? "#6c3fc4" : "#6b5f86",
-              fontWeight: 800,
-              cursor: "pointer",
-              fontSize: 11,
-              minWidth: 70,
-            }}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+            aria-label="Close trainer menu"
+            onClick={() => setMenuOpen(false)}
+            style={{ position: "absolute", inset: 0, border: "none", background: "rgba(30,16,48,0.28)", cursor: "pointer" }}
+          />
+          <aside style={{ position: "absolute", top: 0, right: 0, width: "min(310px, 88vw)", height: "100%", background: "#fff", borderLeft: "1px solid var(--trainer-border)", boxShadow: "-18px 0 36px rgba(30,16,48,0.16)", padding: 18, boxSizing: "border-box", display: "flex", flexDirection: "column", gap: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+              <div>
+                <h2 style={{ margin: "0 0 3px", fontSize: 18, color: "var(--trainer-primary)" }}>Trainer Menu</h2>
+                <p style={{ margin: 0, color: "var(--trainer-muted)", fontSize: 12 }}>Choose a section</p>
+              </div>
+              <button onClick={() => setMenuOpen(false)} style={styles.actionBtn("neutral")}>Close</button>
+            </div>
+            <div style={{ display: "grid", gap: 8 }}>
+              {trainerMenuItems.map(([label, target]) => (
+                <button
+                  key={target}
+                  onClick={() => {
+                    setView(target);
+                    setMsg("");
+                    setMenuOpen(false);
+                  }}
+                  style={{ ...styles.navBtn(view === target, false), width: "100%", justifyContent: "flex-start", textAlign: "left", padding: "13px 14px" }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </aside>
+        </div>
+      )}
 
       <div className="t-body" style={{ maxWidth: 1000, margin: "0 auto", padding: "24px 20px", paddingBottom: 80 }}>
         {view === "members" && (
@@ -1182,6 +1283,86 @@ export default function TrainerDashboard({ onLogout }) {
           </div>
         )}
 
+        {view === "finance" && (
+          <div>
+            <div className="t-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 16 }}>
+              <div>
+                <h2 style={{ fontSize: 22, fontWeight: 800, marginBottom: 4 }}>Finance</h2>
+                <p style={{ color: "#7c6a9a", fontSize: 13 }}>Track gym membership payments in one place. Tea payments stay inside Tea Orders.</p>
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {[
+                  ["All", "all"],
+                  ["Confirmed", "confirmed"],
+                  ["Pending", "pending"],
+                  ["Rejected", "rejected"],
+                ].map(([label, value]) => (
+                  <button
+                    key={value}
+                    onClick={() => setFinanceFilter(value)}
+                    style={styles.choiceBtn(financeFilter === value)}
+                  >
+                    {label}
+                  </button>
+                ))}
+                <button
+                  onClick={() => {
+                    fetchFinancePayments();
+                  }}
+                  style={styles.actionBtn("neutral")}
+                >
+                  Refresh
+                </button>
+              </div>
+            </div>
+
+            <div className="t-four-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 18 }}>
+              {[
+                ["Total", `Rs. ${financeTotal.toLocaleString("en-IN")}`, "var(--trainer-soft)", "var(--trainer-primary)"],
+                ["Collected", `Rs. ${financePaidTotal.toLocaleString("en-IN")}`, "#f0fdf4", "#16a34a"],
+                ["Pending", `Rs. ${financePendingTotal.toLocaleString("en-IN")}`, "#fffbeb", "#d97706"],
+                ["Entries", filteredFinanceRows.length, "#fff", "var(--trainer-text)"],
+              ].map(([label, value, bg, color]) => (
+                <div key={label} style={{ ...styles.card, marginBottom: 0, padding: 14, textAlign: "center", background: bg }}>
+                  <p style={{ margin: "0 0 4px", fontSize: 11, color: "#7c6a9a", fontWeight: 700 }}>{label}</p>
+                  <p style={{ margin: 0, fontSize: 22, fontWeight: 900, color }}>{value}</p>
+                </div>
+              ))}
+            </div>
+
+            {filteredFinanceRows.length === 0 ? (
+              <div style={{ ...styles.card, textAlign: "center", padding: 40 }}>
+                <p style={{ color: "#7c6a9a", fontSize: 14 }}>No finance records found for this filter.</p>
+              </div>
+            ) : (
+              filteredFinanceRows.map((row) => {
+                const paid = row.status === "paid" || row.status === "confirmed";
+                return (
+                  <div key={row.id} style={{ ...styles.card, marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 5 }}>
+                        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: "#1e1030" }}>{row.name}</h3>
+                        <span style={{ background: "var(--trainer-soft)", color: "var(--trainer-primary)", padding: "4px 9px", borderRadius: 999, fontSize: 10, fontWeight: 800 }}>
+                          {row.label}
+                        </span>
+                        <span style={{ background: paid ? "#f0fdf4" : "#fffbeb", color: paid ? "#16a34a" : "#d97706", padding: "4px 9px", borderRadius: 999, fontSize: 10, fontWeight: 800, textTransform: "capitalize" }}>
+                          {row.status}
+                        </span>
+                      </div>
+                      <p style={{ margin: 0, color: "#7c6a9a", fontSize: 12 }}>
+                        {row.detail} • {row.method} • {row.date ? new Date(row.date).toLocaleString("en-IN") : "-"}
+                      </p>
+                    </div>
+                    <p style={{ margin: 0, fontSize: 20, fontWeight: 900, color: paid ? "#16a34a" : "#d97706" }}>
+                      Rs. {row.amount.toLocaleString("en-IN")}
+                    </p>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+
         {view === "teaorders" && (
           <div>
             <div className="t-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 16 }}>
@@ -1262,64 +1443,75 @@ export default function TrainerDashboard({ onLogout }) {
                       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
                         <span style={{ background: statusStyle.bg, color: statusStyle.color, padding: "6px 12px", borderRadius: 20, fontSize: 12, fontWeight: 700, textTransform: "capitalize" }}>{order.status || "new"}</span>
                         <span style={{ background: paymentStyle.bg, color: paymentStyle.color, padding: "6px 12px", borderRadius: 20, fontSize: 12, fontWeight: 700, textTransform: "capitalize" }}>{paymentStatus}</span>
-                        <button onClick={() => printTeaOrder(order)} style={styles.actionBtn("primary")}>
-                          Print
-                        </button>
-                        <a href={whatsappLink(order.phone, message)} target="_blank" rel="noreferrer" style={styles.actionBtn("success")}>
-                          WhatsApp
-                        </a>
+                        <div style={{ position: "relative" }}>
+                          <button
+                            aria-label="Tea order actions"
+                            onClick={() => setOpenTeaMenuId((current) => (current === order.id ? null : order.id))}
+                            style={{ width: 38, height: 34, borderRadius: 10, border: "1px solid var(--trainer-border)", background: "#fff", color: "var(--trainer-primary)", cursor: "pointer", fontSize: 20, fontWeight: 900, lineHeight: 1 }}
+                          >
+                            ...
+                          </button>
+                          {openTeaMenuId === order.id && (
+                            <div style={{ position: "absolute", right: 0, top: 40, zIndex: 20, width: 220, background: "#fff", border: "1px solid var(--trainer-border)", borderRadius: 12, boxShadow: "0 18px 40px rgba(30,16,48,0.18)", padding: 10 }}>
+                              <button onClick={() => { printTeaOrder(order); setOpenTeaMenuId(null); }} style={{ ...styles.actionBtn("primary"), width: "100%", marginBottom: 8 }}>Print</button>
+                              <a href={whatsappLink(order.phone, message)} target="_blank" rel="noreferrer" onClick={() => setOpenTeaMenuId(null)} style={{ ...styles.actionBtn("success"), width: "100%", marginBottom: 8 }}>WhatsApp</a>
+                              <p style={{ margin: "8px 0 6px", color: "var(--trainer-muted)", fontSize: 11, fontWeight: 800 }}>ORDER STATUS</p>
+                              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                                {["new", "confirmed", "packed", "delivered", "cancelled"].map((status) => (
+                                  <button
+                                    key={status}
+                                    onClick={() => {
+                                      updateTeaOrderStatus(order.id, status);
+                                      setOpenTeaMenuId(null);
+                                    }}
+                                    style={styles.choiceBtn((order.status || "new") === status)}
+                                  >
+                                    {status}
+                                  </button>
+                                ))}
+                              </div>
+                              <p style={{ margin: "10px 0 6px", color: "var(--trainer-muted)", fontSize: 11, fontWeight: 800 }}>PAYMENT</p>
+                              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 8 }}>
+                                {["paid", "pending"].map((status) => (
+                                  <button
+                                    key={status}
+                                    onClick={() => {
+                                      updateTeaPaymentStatus(order.id, status);
+                                      setOpenTeaMenuId(null);
+                                    }}
+                                    style={styles.choiceBtn(paymentStatus === status)}
+                                  >
+                                    {status}
+                                  </button>
+                                ))}
+                              </div>
+                              <button onClick={() => { setOpenTeaMenuId(null); deleteTeaOrder(order); }} style={{ ...styles.actionBtn("danger"), width: "100%" }}>Delete</button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
 
-                    <div className="t-two-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                      <div>
-                        {[
-                          ["Product ID", order.product_id || "-"],
-                          ["Ordered On", order.ordered_on ? new Date(order.ordered_on).toLocaleString() : "-"],
-                          ["Created", order.created_at ? new Date(order.created_at).toLocaleString() : "-"],
-                          ["Address", order.address || "-"],
-                          ["Payment Method", (order.payment_method || "upi").toUpperCase()],
-                          ["COD Charge", `Rs. ${Number(order.cod_extra_charge || 0).toLocaleString("en-IN")}`],
-                        ].map(([label, value]) => (
-                          <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "8px 0", borderBottom: "1px solid #f5f0ff" }}>
-                            <span style={{ color: "#7c6a9a", fontSize: 12 }}>{label}</span>
-                            <span style={{ color: "#1e1030", fontSize: 12, fontWeight: 600, textAlign: "right" }}>{value}</span>
-                          </div>
-                        ))}
-                      </div>
-
-                      <div>
-                        <label style={styles.label}>Update Status</label>
-                        <div className="t-two-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                          {["new", "confirmed", "packed", "delivered", "cancelled"].map((status) => (
-                            <button
-                              key={status}
-                              onClick={() => updateTeaOrderStatus(order.id, status)}
-                              style={styles.choiceBtn((order.status || "new") === status)}
-                            >
-                              {status}
-                            </button>
-                          ))}
+                    <div>
+                      {[
+                        ["Product ID", order.product_id || "-"],
+                        ["Ordered On", order.ordered_on ? new Date(order.ordered_on).toLocaleString() : "-"],
+                        ["Created", order.created_at ? new Date(order.created_at).toLocaleString() : "-"],
+                        ["Address", order.address || "-"],
+                        ["Payment Method", (order.payment_method || "upi").toUpperCase()],
+                        ["COD Charge", `Rs. ${Number(order.cod_extra_charge || 0).toLocaleString("en-IN")}`],
+                      ].map(([label, value]) => (
+                        <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "8px 0", borderBottom: "1px solid #f5f0ff" }}>
+                          <span style={{ color: "#7c6a9a", fontSize: 12 }}>{label}</span>
+                          <span style={{ color: "#1e1030", fontSize: 12, fontWeight: 600, textAlign: "right" }}>{value}</span>
                         </div>
-                        <label style={{ ...styles.label, marginTop: 12 }}>Payment Collection</label>
-                        <div className="t-two-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                          {["paid", "pending"].map((status) => (
-                            <button
-                              key={status}
-                              onClick={() => updateTeaPaymentStatus(order.id, status)}
-                              style={styles.choiceBtn(paymentStatus === status)}
-                            >
-                              {status}
-                            </button>
-                          ))}
+                      ))}
+                      {parseTeaNotes(order.notes).customerNotes && (
+                        <div style={{ marginTop: 12, background: "#f8f6ff", borderRadius: 12, padding: 12, border: "1px solid #e0d7f5" }}>
+                          <p style={{ margin: "0 0 4px", color: "#7c6a9a", fontSize: 11, fontWeight: 700 }}>CUSTOMER NOTES</p>
+                          <p style={{ margin: 0, color: "#1e1030", fontSize: 13, lineHeight: 1.6 }}>{parseTeaNotes(order.notes).customerNotes}</p>
                         </div>
-                        {parseTeaNotes(order.notes).customerNotes && (
-                          <div style={{ marginTop: 12, background: "#f8f6ff", borderRadius: 12, padding: 12, border: "1px solid #e0d7f5" }}>
-                            <p style={{ margin: "0 0 4px", color: "#7c6a9a", fontSize: 11, fontWeight: 700 }}>CUSTOMER NOTES</p>
-                            <p style={{ margin: 0, color: "#1e1030", fontSize: 13, lineHeight: 1.6 }}>{parseTeaNotes(order.notes).customerNotes}</p>
-                          </div>
-                        )}
-                      </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -1333,6 +1525,37 @@ export default function TrainerDashboard({ onLogout }) {
             <div style={{ marginBottom: 18 }}>
               <h2 style={{ margin: "0 0 6px", fontSize: 24, fontWeight: 900, letterSpacing: "-0.02em" }}>Trainer Settings</h2>
               <p style={{ margin: 0, color: "#7c6a9a", fontSize: 13 }}>Keep the shared login updated and log out from one clean place.</p>
+            </div>
+
+            <div style={styles.card}>
+              <h3 style={{ margin: "0 0 10px", fontSize: 16, fontWeight: 800, color: "var(--trainer-text)" }}>Colour Theme</h3>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 10 }}>
+                {Object.entries(TRAINER_THEMES).map(([key, theme]) => (
+                  <button
+                    key={key}
+                    onClick={() => {
+                      setTrainerThemeName(key);
+                      localStorage.setItem("just4you_trainer_theme", key);
+                    }}
+                    style={{
+                      border: trainerThemeName === key ? `2px solid ${theme.primary}` : "1px solid #e0d7f5",
+                      background: "#fff",
+                      borderRadius: 10,
+                      padding: 10,
+                      cursor: "pointer",
+                      textAlign: "left",
+                      fontFamily: "inherit",
+                    }}
+                  >
+                    <span style={{ display: "flex", gap: 5, marginBottom: 8 }}>
+                      {[theme.primary, theme.primaryMid, theme.primarySoft].map((color) => (
+                        <span key={color} style={{ width: 18, height: 18, borderRadius: 6, background: color, border: "1px solid rgba(0,0,0,0.08)" }} />
+                      ))}
+                    </span>
+                    <span style={{ color: theme.text, fontSize: 12, fontWeight: 800 }}>{theme.label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="t-two-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
@@ -1397,7 +1620,7 @@ export default function TrainerDashboard({ onLogout }) {
             <div>
               <button onClick={() => setView("members")} style={{ ...styles.btn(false), marginBottom: 16 }}>Back</button>
 
-              <div style={{ ...styles.card, background: "linear-gradient(135deg,#9b7ed4,#6c3fc4)", color: "#fff", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+              <div style={{ ...styles.card, background: "linear-gradient(135deg,var(--trainer-mid),var(--trainer-primary))", color: "#fff", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
                 {selectedPhoto && !selectedPhotoBroken ? (
                   <img src={selectedPhoto} alt={selected.full_name} onError={() => setSelectedPhotoBroken(true)} style={{ width: 72, height: 72, borderRadius: "50%", objectFit: "cover", border: "3px solid rgba(255,255,255,0.3)" }} />
                 ) : (
