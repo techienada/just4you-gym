@@ -32,6 +32,7 @@ export default async function handler(req, res) {
     three_days_before: process.env.MSG91_TEMPLATE_THREE_DAYS_BEFORE,
     expiry_day: process.env.MSG91_TEMPLATE_EXPIRY_DAY,
     expired_followup: process.env.MSG91_TEMPLATE_EXPIRED_FOLLOWUP,
+    monthly_assessment: process.env.MSG91_TEMPLATE_MONTHLY_ASSESSMENT,
   };
 
   const templateName = templateMap[reminderType];

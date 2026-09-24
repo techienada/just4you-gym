@@ -75,6 +75,15 @@ function getUPILink(amount) {
   return `upi://pay?pa=${UPI_ID}&pn=${encodeURIComponent(UPI_NAME)}&am=${amount}&cu=INR&tn=${encodeURIComponent(UPI_NOTE)}`;
 }
 
+function getAssessmentReminder(latestAssessment) {
+  if (!latestAssessment?.date) {
+    return { title: "Your first assessment is due", detail: "Add your current measurements so you and your trainer can track your progress.", color: "#6c3fc4", bg: "#f3f0ff" };
+  }
+  const daysSinceAssessment = Math.floor((Date.now() - new Date(`${latestAssessment.date}T12:00:00`).getTime()) / (1000 * 60 * 60 * 24));
+  if (daysSinceAssessment < 30) return null;
+  return { title: "Your monthly assessment is due", detail: `Your last assessment was ${daysSinceAssessment} days ago. Add a new one to keep your progress up to date.`, color: "#d97706", bg: "#fffbeb" };
+}
+
 export default function MemberDashboard({ member, onLogout }) {
   const [weightHistory, setWeightHistory] = useState([]);
   const [assessment, setAssessment] = useState(() => createDefaultAssessment(member));
@@ -156,6 +165,7 @@ export default function MemberDashboard({ member, onLogout }) {
   const olderAssessments = assessmentHistory.filter((entry) => entry.id !== assessment.id);
   const isViewingPreviousAssessment = assessmentHistory.length > 0 && assessment.id !== assessmentHistory[0]?.id;
   const paymentAmount = Number.parseFloat(paymentForm.amount || member?.fee_amount || "0");
+  const assessmentReminder = getAssessmentReminder(assessmentHistory[0]);
 
   function viewAssessmentRecord(entry) {
     setAssessment(entry);
@@ -269,6 +279,16 @@ export default function MemberDashboard({ member, onLogout }) {
               <div style={{ ...card, background: expiry.bg, border: `1px solid ${expiry.color}33`, marginBottom: 12 }}>
                 <p style={{ margin: "0 0 4px", fontSize: 14, fontWeight: 800, color: expiry.color }}>{expiry.label}</p>
                 <p style={{ margin: 0, fontSize: 12, color: "#7c6a9a" }}>{expiry.detail}</p>
+              </div>
+            )}
+
+            {assessmentReminder && (
+              <div style={{ ...card, background: assessmentReminder.bg, border: `1px solid ${assessmentReminder.color}33`, marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                <div>
+                  <p style={{ margin: "0 0 4px", fontSize: 14, fontWeight: 800, color: assessmentReminder.color }}>{assessmentReminder.title}</p>
+                  <p style={{ margin: 0, fontSize: 12, color: "#7c6a9a" }}>{assessmentReminder.detail}</p>
+                </div>
+                <button onClick={startMemberAssessment} style={{ padding: "8px 12px", borderRadius: 8, border: "none", background: assessmentReminder.color, color: "#fff", fontWeight: 700, cursor: "pointer", fontSize: 12 }}>Add assessment</button>
               </div>
             )}
 

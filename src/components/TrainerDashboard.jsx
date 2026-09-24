@@ -37,6 +37,19 @@ function getExpiryStatus(expiry) {
   return { label: `${days}d left`, color: "#16a34a", bg: "#f0fdf4" };
 }
 
+function getMembershipDurationMonths(packageType) {
+  return packageType === "3 Months" ? 3 : 1;
+}
+
+function getRenewedExpiryDate(currentExpiry, packageType) {
+  const today = new Date();
+  const current = currentExpiry ? new Date(`${currentExpiry}T12:00:00`) : null;
+  const start = current && current >= today ? current : today;
+  const renewed = new Date(start);
+  renewed.setMonth(renewed.getMonth() + getMembershipDurationMonths(packageType));
+  return renewed.toISOString().slice(0, 10);
+}
+
 function orderStatusStyle(status) {
   if (status === "delivered") return { color: "#16a34a", bg: "#f0fdf4" };
   if (status === "confirmed") return { color: "#2563eb", bg: "#eff6ff" };
@@ -330,8 +343,10 @@ function PaymentConfirmations({ members, onRefresh }) {
   }
 
   async function confirmPayment(payment) {
+    const member = members.find((entry) => entry.id === payment.member_id);
+    const renewedExpiryDate = getRenewedExpiryDate(member?.expiry_date, payment.package_type);
     await supabase.from("upi_payments").update({ status: "confirmed", confirmed_at: new Date().toISOString() }).eq("id", payment.id);
-    await supabase.from("members").update({ payment_status: "confirmed", fee_status: "paid", last_payment_date: new Date().toISOString().split("T")[0], last_payment_amount: payment.amount, package_type: payment.package_type }).eq("id", payment.member_id);
+    await supabase.from("members").update({ payment_status: "confirmed", fee_status: "paid", fee_paid_date: new Date().toISOString().split("T")[0], last_payment_date: new Date().toISOString().split("T")[0], last_payment_amount: payment.amount, package_type: payment.package_type, expiry_date: renewedExpiryDate }).eq("id", payment.member_id);
     fetchPayments();
     onRefresh();
   }

@@ -9,7 +9,8 @@ type MemberRow = {
   fee_amount: number | null;
 };
 
-type ReminderStage = "three_days_before" | "expiry_day" | "expired_followup";
+type ReminderStage = "three_days_before" | "expiry_day" | "expired_followup" | "monthly_assessment";
+type AssessmentRow = { member_id: string; assessment_date: string | null };
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -37,6 +38,10 @@ function normalizePhone(phone: string | null) {
 function getReminderMessage(member: MemberRow, stage: ReminderStage) {
   const packageLabel = member.package_type || "membership";
   const amount = member.fee_amount ? ` Rs. ${Number(member.fee_amount).toLocaleString("en-IN")}` : "";
+
+  if (stage === "monthly_assessment") {
+    return `Hi ${member.full_name || "Member"}, it is time for your monthly fitness assessment at Just4You Ladies Gym. Please open your member dashboard and add your latest measurements so your trainer can track your progress.`;
+  }
 
   if (stage === "three_days_before") {
     return `Hi ${member.full_name || "Member"}, your ${packageLabel} at Just4You Ladies Gym will expire in 3 days on ${member.expiry_date}. Please renew to continue your workouts smoothly.${amount ? ` Renewal amount:${amount}.` : ""}`;
@@ -127,42 +132,50 @@ Deno.serve(async () => {
 
   const { data: members, error } = await supabase
     .from("members")
-    .select("id, full_name, phone, expiry_date, package_type, fee_amount")
-    .not("expiry_date", "is", null);
+    .select("id, full_name, phone, expiry_date, package_type, fee_amount");
 
-  if (error) {
-    return new Response(JSON.stringify({ ok: false, error: error.message }), {
+  const { data: assessments, error: assessmentsError } = await supabase
+    .from("assessment_history")
+    .select("member_id, assessment_date");
+
+  if (error || assessmentsError) {
+    return new Response(JSON.stringify({ ok: false, error: error?.message || assessmentsError?.message }), {
       status: 500,
       headers: { "Content-Type": "application/json" },
     });
   }
 
   const results: Array<Record<string, unknown>> = [];
+  const latestAssessmentByMember = new Map<string, string>();
+  for (const assessment of (assessments || []) as AssessmentRow[]) {
+    if (assessment.assessment_date && (!latestAssessmentByMember.get(assessment.member_id) || assessment.assessment_date > latestAssessmentByMember.get(assessment.member_id)!)) {
+      latestAssessmentByMember.set(assessment.member_id, assessment.assessment_date);
+    }
+  }
 
   for (const member of (members || []) as MemberRow[]) {
-    if (!member.phone || !member.expiry_date) continue;
+    if (!member.phone) continue;
+    const plannedReminders: Array<{ stage: ReminderStage; reminderDate: string }> = [];
+    if (member.expiry_date === threeDaysLater) plannedReminders.push({ stage: "three_days_before", reminderDate: todayStr });
+    if (member.expiry_date === todayStr) plannedReminders.push({ stage: "expiry_day", reminderDate: todayStr });
+    if (member.expiry_date === yesterdayStr) plannedReminders.push({ stage: "expired_followup", reminderDate: todayStr });
 
-    let stage: ReminderStage | null = null;
-    if (member.expiry_date === threeDaysLater) stage = "three_days_before";
-    if (member.expiry_date === todayStr) stage = "expiry_day";
-    if (member.expiry_date === yesterdayStr) stage = "expired_followup";
-    if (!stage) continue;
+    const latestAssessmentDate = latestAssessmentByMember.get(member.id);
+    const assessmentReminderDate = latestAssessmentDate
+      ? formatDate(addDays(new Date(`${latestAssessmentDate}T12:00:00`), 30))
+      : `${todayStr.slice(0, 7)}-01`;
+    if (assessmentReminderDate <= todayStr) plannedReminders.push({ stage: "monthly_assessment", reminderDate: assessmentReminderDate });
 
-    const exists = await alreadySent(member.id, stage, todayStr);
-    if (exists) {
-      results.push({ memberId: member.id, stage, status: "skipped_duplicate" });
-      continue;
+    for (const { stage, reminderDate } of plannedReminders) {
+      const exists = await alreadySent(member.id, stage, reminderDate);
+      if (exists) {
+        results.push({ memberId: member.id, stage, status: "skipped_duplicate" });
+        continue;
+      }
+      const sendResult = await sendReminder(member, stage);
+      await logReminder(member.id, stage, reminderDate, sendResult);
+      results.push({ memberId: member.id, memberName: member.full_name, stage, status: sendResult.ok ? "sent" : "failed", providerMessage: sendResult.providerMessage });
     }
-
-    const sendResult = await sendReminder(member, stage);
-    await logReminder(member.id, stage, todayStr, sendResult);
-    results.push({
-      memberId: member.id,
-      memberName: member.full_name,
-      stage,
-      status: sendResult.ok ? "sent" : "failed",
-      providerMessage: sendResult.providerMessage,
-    });
   }
 
   return new Response(JSON.stringify({ ok: true, processedOn: todayStr, results }), {

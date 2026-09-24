@@ -13,8 +13,9 @@ The function checks `members.expiry_date` every day and sends one reminder for:
 - `three_days_before`
 - `expiry_day`
 - `expired_followup`
+- `monthly_assessment` when a member has no assessment or their latest one is 30 days old
 
-Each send attempt is logged in `renewal_reminders`, so the same reminder is not sent twice on the same day for the same stage.
+Each send attempt is logged in `renewal_reminders`. Renewal notices are deduplicated by day, while the monthly assessment notice is deduplicated by its due date so members receive one prompt per assessment cycle.
 
 ## What you still need
 
@@ -48,6 +49,7 @@ Add these in Vercel:
 - `MSG91_TEMPLATE_THREE_DAYS_BEFORE`
 - `MSG91_TEMPLATE_EXPIRY_DAY`
 - `MSG91_TEMPLATE_EXPIRED_FOLLOWUP`
+- `MSG91_TEMPLATE_MONTHLY_ASSESSMENT`
 
 Notes:
 
