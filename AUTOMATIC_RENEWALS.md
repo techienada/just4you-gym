@@ -33,7 +33,7 @@ This repo is now prepared for `MSG91 WhatsApp` through the Vercel relay route.
 Run this SQL in Supabase:
 
 1. Your existing app tables
-2. `assessment_history`
+2. `supabase/sql/assessment_history.sql`
 3. `supabase/sql/renewal_reminders.sql`
 
 ## Vercel environment variables

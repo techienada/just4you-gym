@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../supabase";
-import { ASSESSMENT_FIELDS, calcAssessmentBMI, createDefaultAssessment, fetchMemberAssessments, getAssessmentBMICategory, getBodyFatStatus } from "../memberAssessments";
+import { ASSESSMENT_FIELDS, calcAssessmentBMI, createDefaultAssessment, fetchMemberAssessments, getAssessmentBMICategory, getBodyFatStatus, saveMemberAssessment } from "../memberAssessments";
 import { getMemberPhoto } from "../memberPhotos";
 
 const UPI_ID = "919014944750@axlm";
@@ -80,6 +80,7 @@ export default function MemberDashboard({ member, onLogout }) {
   const [assessment, setAssessment] = useState(() => createDefaultAssessment(member));
   const [assessmentHistory, setAssessmentHistory] = useState([]);
   const [assessmentMsg, setAssessmentMsg] = useState("");
+  const [isAddingAssessment, setIsAddingAssessment] = useState(false);
   const [memberPhoto, setMemberPhoto] = useState(() => getMemberPhoto(member?.id));
   const [photoBroken, setPhotoBroken] = useState(false);
   const [paymentHistory, setPaymentHistory] = useState([]);
@@ -123,6 +124,7 @@ export default function MemberDashboard({ member, onLogout }) {
         setAssessmentHistory(history);
         setAssessment(history[0] || createDefaultAssessment(member));
         setAssessmentMsg("");
+        setIsAddingAssessment(false);
       })
       .catch((error) => {
         setAssessmentHistory([]);
@@ -135,6 +137,7 @@ export default function MemberDashboard({ member, onLogout }) {
     setAssessment(createDefaultAssessment(member));
     setAssessmentHistory([]);
     setAssessmentMsg("");
+    setIsAddingAssessment(false);
     setMemberPhoto(getMemberPhoto(member?.id));
     setPhotoBroken(false);
     setPaymentForm({
@@ -151,7 +154,37 @@ export default function MemberDashboard({ member, onLogout }) {
   const effectivePaymentStatus = latestPayment?.status || member.payment_status || "not submitted";
   const effectiveLastPaymentAmount = latestPayment?.amount || member.last_payment_amount || null;
   const olderAssessments = assessmentHistory.filter((entry) => entry.id !== assessment.id);
+  const isViewingPreviousAssessment = assessmentHistory.length > 0 && assessment.id !== assessmentHistory[0]?.id;
   const paymentAmount = Number.parseFloat(paymentForm.amount || member?.fee_amount || "0");
+
+  function viewAssessmentRecord(entry) {
+    setAssessment(entry);
+    setAssessmentMsg("");
+    setIsAddingAssessment(false);
+  }
+
+  function startMemberAssessment() {
+    setAssessment(createDefaultAssessment(member, assessmentHistory[0] || assessment));
+    setAssessmentMsg("");
+    setIsAddingAssessment(true);
+  }
+
+  function updateMemberAssessmentField(key, value) {
+    setAssessment((current) => ({ ...current, [key]: value }));
+  }
+
+  async function saveMemberAssessmentRecord() {
+    try {
+      const nextHistory = await saveMemberAssessment(member.id, assessment, member);
+      const savedAssessment = nextHistory.find((entry) => entry.id === assessment.id) || nextHistory[0] || assessment;
+      setAssessmentHistory(nextHistory);
+      setAssessment(savedAssessment);
+      setAssessmentMsg("success");
+      setIsAddingAssessment(false);
+    } catch (error) {
+      setAssessmentMsg(`error:${error.message || "Could not save your assessment."}`);
+    }
+  }
 
   async function submitPayment() {
     setPaymentMsg("");
@@ -284,17 +317,38 @@ export default function MemberDashboard({ member, onLogout }) {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
                 <div>
                   <h3 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 700 }}>Assessment Sheet</h3>
-                  <p style={{ margin: 0, color: "#7c6a9a", fontSize: 12 }}>Visible to you, editable from trainer access only. Your newest assessment shows first.</p>
+                  <p style={{ margin: 0, color: "#7c6a9a", fontSize: 12 }}>{isAddingAssessment ? "Add your measurements to create a new assessment record." : isViewingPreviousAssessment ? "Viewing a previous assessment. Members can view all saved records." : "Your newest assessment shows first. You can add a new record anytime."}</p>
                 </div>
-                {assessment.date && <span style={{ background: "#f3f0ff", color: "#6c3fc4", padding: "5px 12px", borderRadius: 20, fontSize: 12, fontWeight: 700 }}>{assessment.date}</span>}
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  {assessment.date && <span style={{ background: "#f3f0ff", color: "#6c3fc4", padding: "5px 12px", borderRadius: 20, fontSize: 12, fontWeight: 700 }}>{assessment.date}</span>}
+                  {!isAddingAssessment && <button onClick={startMemberAssessment} style={{ padding: "5px 10px", borderRadius: 8, border: "none", background: "#6c3fc4", color: "#fff", fontWeight: 700, cursor: "pointer", fontSize: 11 }}>New assessment</button>}
+                  {isViewingPreviousAssessment && <button onClick={() => viewAssessmentRecord(assessmentHistory[0])} style={{ padding: "5px 10px", borderRadius: 8, border: "1px solid #e0d7f5", background: "#fff", color: "#6c3fc4", fontWeight: 700, cursor: "pointer", fontSize: 11 }}>Latest record</button>}
+                </div>
               </div>
 
               {assessmentMsg.startsWith("error:") ? (
                 <p style={{ color: "#dc2626", fontSize: 13 }}>{assessmentMsg.replace("error:", "")}</p>
+              ) : isAddingAssessment ? (
+                <div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+                    {ASSESSMENT_FIELDS.filter((field) => field.key !== "remarks").map((field) => (
+                      <div key={field.key} style={field.key === "profileNote" ? { gridColumn: "1 / -1" } : null}>
+                        <label style={{ display: "block", marginBottom: 5, color: "#7c6a9a", fontSize: 11, fontWeight: 700 }}>{field.label}</label>
+                        <input type={field.type} step={field.step} value={assessment[field.key] || ""} onChange={(event) => updateMemberAssessmentField(field.key, event.target.value)} style={{ width: "100%", boxSizing: "border-box", padding: "10px 11px", borderRadius: 8, border: "1px solid #e0d7f5", color: "#1e1030", fontSize: 13 }} />
+                      </div>
+                    ))}
+                  </div>
+                  <p style={{ margin: "0 0 12px", color: "#7c6a9a", fontSize: 11 }}>Trainer remarks can only be added by your trainer.</p>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button onClick={saveMemberAssessmentRecord} style={{ padding: "9px 14px", borderRadius: 8, border: "none", background: "#6c3fc4", color: "#fff", fontWeight: 700, cursor: "pointer", fontSize: 12 }}>Save assessment</button>
+                    <button onClick={() => viewAssessmentRecord(assessmentHistory[0] || createDefaultAssessment(member))} style={{ padding: "9px 14px", borderRadius: 8, border: "1px solid #e0d7f5", background: "#fff", color: "#6c3fc4", fontWeight: 700, cursor: "pointer", fontSize: 12 }}>Cancel</button>
+                  </div>
+                </div>
               ) : !assessmentHistory.length ? (
-                <p style={{ color: "#7c6a9a", fontSize: 13 }}>Your trainer has not added this assessment yet.</p>
+                <p style={{ color: "#7c6a9a", fontSize: 13 }}>No assessments saved yet. Select New assessment to add your first record.</p>
               ) : (
                 <>
+                  {assessmentMsg === "success" && <p style={{ margin: "0 0 12px", color: "#166534", fontSize: 13, fontWeight: 700 }}>Your assessment was saved and is now visible to your trainer.</p>}
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
                     {[
                       ["Body Fat", assessment.bodyFat ? `${assessment.bodyFat}%` : "-", bodyFatStatus],
@@ -335,15 +389,15 @@ export default function MemberDashboard({ member, onLogout }) {
                         {olderAssessments.map((entry) => {
                           const entryBMI = calcAssessmentBMI(entry.height, entry.weight);
                           return (
-                            <div key={entry.id} style={{ background: "#fff", border: "1px solid #e0d7f5", borderRadius: 12, padding: 12 }}>
+                            <button key={entry.id} onClick={() => viewAssessmentRecord(entry)} style={{ width: "100%", textAlign: "left", background: "#fff", border: "1px solid #e0d7f5", borderRadius: 12, padding: 12, cursor: "pointer" }}>
                               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
                                 <p style={{ margin: 0, color: "#1e1030", fontSize: 13, fontWeight: 800 }}>{entry.date || "Undated assessment"}</p>
-                                <span style={{ background: "#f3f0ff", color: "#6c3fc4", padding: "4px 10px", borderRadius: 999, fontSize: 10, fontWeight: 700 }}>Previous</span>
+                                <span style={{ background: "#f3f0ff", color: "#6c3fc4", padding: "4px 10px", borderRadius: 999, fontSize: 10, fontWeight: 700 }}>View full record</span>
                               </div>
                               <p style={{ margin: 0, color: "#7c6a9a", fontSize: 12, lineHeight: 1.6 }}>
                                 Weight {entry.weight || "-"} kg • Body Fat {entry.bodyFat || "-"}% • BMI {entryBMI || "-"}
                               </p>
-                            </div>
+                            </button>
                           );
                         })}
                       </div>
